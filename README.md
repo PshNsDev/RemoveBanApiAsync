@@ -5,8 +5,4 @@
 [![Made with Rust](https://img.shields.io/badge/Made%20with-Rust-orange?logo=rust&logoColor=white)](https://www.rust-lang.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-<<<<<<< HEAD
 To download the latest version [click me](https://github.com/PshNsDev/RemoveBanApiAsync/releases/latest) to download
-=======
-To download the latest version [click me](https://github.com/PshNsDev/RemoveBanApiAsync/releases/latest) to download
->>>>>>> 88eb02f (Source Code V1.2C)
