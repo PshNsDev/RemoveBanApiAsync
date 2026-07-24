@@ -8,7 +8,7 @@ description = "Bypass Ban Api Async of roblox (Needs a new account)"
 eframe = "0.27"
 winreg = "0.52"
 dirs = "5.0"
-reqwest = "0.13.0-rc.1"
+reqwest = "0.12"
 is_elevated = "0.1"
 rand = "0.8"
 image = { version = "0.24", default-features = false, features = ["ico", "png"] }

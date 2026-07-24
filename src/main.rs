@@ -9,7 +9,7 @@ use std::os::windows::process::CommandExt;
 use winreg::enums::*;
 use winreg::RegKey;
 
-const CURRENT_VERSION: &str = "1.2.0";   // ← Update this when you release new version
+const CURRENT_VERSION: &str = "1.2B";
 
 #[derive(Clone, Debug)]
 pub struct NetworkAdapterInfo {
@@ -30,33 +30,35 @@ pub fn is_admin() -> bool {
 }
 
 fn check_for_update() {
-    match reqwest::blocking::get("https://raw.githubusercontent.com/PshNsDev/RemoveBanApiAsync/refs/heads/main/version.txt") {
-        Ok(response) => {
-            if let Ok(latest) = response.text() {
-                let latest = latest.trim();
-                if latest != CURRENT_VERSION {
-                    let msg = format!("New version available ({}).\nCurrent version: {}\n\nDo you want to download it?", latest, CURRENT_VERSION);
-                    let result = Command::new("powershell")
-                        .args(&["-Command", &format!("Add-Type -AssemblyName PresentationFramework; [System.Windows.MessageBox]::Show('{}', 'Update Available', 'YesNo', 'Question')", msg.replace("'", "`'"))])
-                        .creation_flags(0x08000000)
-                        .output();
+    let script = format!(r#"
+        Add-Type -AssemblyName PresentationFramework
 
-                    if let Ok(out) = result {
-                        if String::from_utf8_lossy(&out.stdout).trim() == "Yes" {
-                            let _ = Command::new("cmd").args(&["/c", "start", "https://github.com/PshNsDev/RemoveBanApiAsync/releases"]).spawn();
-                        }
-                    }
-                }
-            }
-        }
-        Err(_) => {
-            // No internet
-            let _ = Command::new("powershell")
-                .args(&["-Command", "Add-Type -AssemblyName PresentationFramework; [System.Windows.MessageBox]::Show('No wifi detected.', 'Connection Error', 'OK', 'Warning')"])
-                .creation_flags(0x08000000)
-                .output();
-        }
-    }
+        try {{
+            $latestText = (Invoke-WebRequest -Uri "https://raw.githubusercontent.com/PshNsDev/RemoveBanApiAsync/refs/heads/master/version.txt" -UseBasicParsing -TimeoutSec 6).Content.Trim()
+
+            if (![string]::IsNullOrWhiteSpace($latestText)) {{
+                $latest = [Version]$latestText
+                $current = [Version]"{0}"
+
+                if ($latest -gt $current) {{
+                    $msg = "New version available $latest.`nCurrent version: $current`n`nDo you want to download it?"
+                    $result = [System.Windows.MessageBox]::Show($msg, "Update Available", "YesNo", "Question")
+
+                    if ($result -eq "Yes") {{
+                        Start-Process "https://github.com/PshNsDev/RemoveBanApiAsync/releases"
+                    }}
+                }}
+            }}
+        }}
+        catch {{
+            [System.Windows.MessageBox]::Show("No internet connection detected.", "Connection Error", "OK", "Warning")
+        }}
+    "#, CURRENT_VERSION);
+
+    let _ = Command::new("powershell")
+        .args(&["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", &script])
+        .creation_flags(0x08000000)
+        .output();
 }
 
 pub fn delete_roblox_cookies() -> Result<String, String> {
@@ -113,7 +115,12 @@ pub fn get_network_adapters() -> Vec<NetworkAdapterInfo> {
 
 fn get_adapter_interface_name(net_cfg_id: &str) -> Result<String, String> {
     let script = format!("Get-NetAdapter | Where-Object {{ $_.InterfaceGuid -eq '{}' }} | Select-Object -ExpandProperty Name", net_cfg_id);
-    let output = Command::new("powershell").args(&["-Command", &script]).stdout(Stdio::piped()).creation_flags(0x08000000).output().map_err(|e| e.to_string())?;
+    let output = Command::new("powershell")
+        .args(&["-Command", &script])
+        .stdout(Stdio::piped())
+        .creation_flags(0x08000000)
+        .output()
+        .map_err(|e| e.to_string())?;
     let name = String::from_utf8_lossy(&output.stdout).trim().to_string();
     if !name.is_empty() { Ok(name) } else { Err("Failed".to_string()) }
 }
@@ -121,14 +128,22 @@ fn get_adapter_interface_name(net_cfg_id: &str) -> Result<String, String> {
 pub fn spoof_mac(adapter_id: &str, new_mac: &str) -> Result<(), String> {
     let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
     let subkey_path = format!(r"SYSTEM\CurrentControlSet\Control\Class\{{4d36e972-e325-11ce-bfc1-08002be10318}}\{}", adapter_id);
-    let key = hklm.open_subkey_with_flags(&subkey_path, KEY_WRITE).map_err(|e| format!("Error opening registry: {}", e))?;
-    key.set_value("NetworkAddress", &new_mac).map_err(|e| format!("Error setting MAC: {}", e))?;
+    let key = hklm.open_subkey_with_flags(&subkey_path, KEY_WRITE)
+        .map_err(|e| format!("Error opening registry: {}", e))?;
+    key.set_value("NetworkAddress", &new_mac)
+        .map_err(|e| format!("Error setting MAC: {}", e))?;
     Ok(())
 }
 
 pub fn restart_adapter(interface_name: &str) -> Result<(), String> {
     let ps_script = format!("Restart-NetAdapter -Name '{}' -Confirm:$false", interface_name);
-    let output = Command::new("powershell").args(&["-Command", &ps_script]).stdout(Stdio::piped()).stderr(Stdio::piped()).creation_flags(0x08000000).output().map_err(|e| format!("Failed to execute PowerShell: {}", e))?;
+    let output = Command::new("powershell")
+        .args(&["-Command", &ps_script])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .creation_flags(0x08000000)
+        .output()
+        .map_err(|e| format!("Failed to execute PowerShell: {}", e))?;
     if output.status.success() { Ok(()) } else {
         Err(format!("Restart error: {}", String::from_utf8_lossy(&output.stderr).trim()))
     }
@@ -193,9 +208,8 @@ impl eframe::App for AppGui {
                 ui.label(egui::RichText::new("Cookie Cleanup").strong());
                 let btn = ui.button("Delete Roblox Cookie File");
                 if btn.clicked() {
-                    match delete_roblox_cookies() {
-                        Ok(_) => {},
-                        Err(err) => show_error_in_cmd(&err),
+                    if let Err(err) = delete_roblox_cookies() {
+                        show_error_in_cmd(&err);
                     }
                 }
                 if btn.hovered() { ctx.set_cursor_icon(egui::CursorIcon::PointingHand); }
