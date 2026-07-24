@@ -9,7 +9,7 @@ use std::os::windows::process::CommandExt;
 use winreg::enums::*;
 use winreg::RegKey;
 
-const CURRENT_VERSION: &str = "1.2C";
+const CURRENT_VERSION: &str = "1.2.1";
 
 #[derive(Clone, Debug)]
 pub struct NetworkAdapterInfo {
