@@ -1,14 +1,17 @@
 [package]
 name = "RemoveBanApiAsync"
-version = "1.2.0"
+version = "1.2.1"
 edition = "2024"
 description = "Bypass Ban Api Async of roblox (Needs a new account)"
 
 [dependencies]
 eframe = "0.27"
+rfd = "0.15"
+open = "5"
+semver = "1"
 winreg = "0.52"
 dirs = "5.0"
-reqwest = "0.12"
+reqwest = { version = "0.12", features = ["blocking", "rustls-tls"] }
 is_elevated = "0.1"
 rand = "0.8"
 image = { version = "0.24", default-features = false, features = ["ico", "png"] }

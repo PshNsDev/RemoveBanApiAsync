@@ -2,6 +2,7 @@
 
 use eframe::egui;
 use std::fs;
+use std::thread;
 use std::path::PathBuf;
 use std::process::Command;
 use std::process::Stdio;
@@ -9,7 +10,7 @@ use std::os::windows::process::CommandExt;
 use winreg::enums::*;
 use winreg::RegKey;
 
-const CURRENT_VERSION: &str = "1.2.1";
+const CURRENT_VERSION: &str = "1.2.1A";
 
 #[derive(Clone, Debug)]
 pub struct NetworkAdapterInfo {
@@ -30,35 +31,61 @@ pub fn is_admin() -> bool {
 }
 
 fn check_for_update() {
-    let script = format!(r#"
-        Add-Type -AssemblyName PresentationFramework
+    thread::spawn(|| {
+        const VERSION_URL: &str =
+            "https://raw.githubusercontent.com/PshNsDev/RemoveBanApiAsync/master/version.txt";
 
-        try {{
-            $latestText = (Invoke-WebRequest -Uri "https://raw.githubusercontent.com/PshNsDev/RemoveBanApiAsync/refs/heads/master/version.txt" -UseBasicParsing -TimeoutSec 6).Content.Trim()
+        let client = match reqwest::blocking::Client::builder()
+            .timeout(std::time::Duration::from_secs(15))
+            .build()
+        {
+            Ok(c) => c,
+            Err(_) => return,
+        };
 
-            if (![string]::IsNullOrWhiteSpace($latestText)) {{
-                $latest = [Version]$latestText
-                $current = [Version]"{0}"
+        let latest = match client.get(VERSION_URL).send() {
+            Ok(resp) => {
+                if !resp.status().is_success() {
+                    return;
+                }
 
-                if ($latest -gt $current) {{
-                    $msg = "New version available $latest.`nCurrent version: $current`n`nDo you want to download it?"
-                    $result = [System.Windows.MessageBox]::Show($msg, "Update Available", "YesNo", "Question")
+                match resp.text() {
+                    Ok(text) => text.trim().to_string(),
+                    Err(_) => return,
+                }
+            }
+            Err(_) => {
+                return;
+            }
+        };
 
-                    if ($result -eq "Yes") {{
-                        Start-Process "https://github.com/PshNsDev/RemoveBanApiAsync/releases"
-                    }}
-                }}
-            }}
-        }}
-        catch {{
-            [System.Windows.MessageBox]::Show("No internet connection detected.", "Connection Error", "OK", "Warning")
-        }}
-    "#, CURRENT_VERSION);
+        let latest_version = match latest.parse::<semver::Version>() {
+            Ok(v) => v,
+            Err(_) => return,
+        };
 
-    let _ = Command::new("powershell")
-        .args(&["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", &script])
-        .creation_flags(0x08000000)
-        .output();
+        let current_version = match semver::Version::parse(CURRENT_VERSION) {
+            Ok(v) => v,
+            Err(_) => return,
+        };
+
+        if latest_version > current_version {
+            let result = rfd::MessageDialog::new()
+                .set_title("Update Available")
+                .set_description(&format!(
+                    "A new version is available!\n\nCurrent: {}\nLatest: {}\n\nOpen the download page?",
+                    CURRENT_VERSION,
+                    latest
+                ))
+                .set_buttons(rfd::MessageButtons::YesNo)
+                .set_level(rfd::MessageLevel::Info)
+                .show();
+
+            if result == rfd::MessageDialogResult::Yes {
+                let _ = open::that("https://github.com/PshNsDev/RemoveBanApiAsync/releases");
+            }
+        }
+    });
 }
 
 pub fn delete_roblox_cookies() -> Result<String, String> {
@@ -195,7 +222,7 @@ impl eframe::App for AppGui {
                 if let Some(texture) = &self.header_texture {
                     ui.image((texture.id(), egui::vec2(32.0, 32.0)));
                 }
-                ui.heading("Remove Ban Api Async v1.2");
+                ui.heading("Remove Ban Api Async");
             });
 
             ui.add_space(15.0);
@@ -279,7 +306,7 @@ fn main() -> Result<(), eframe::Error> {
         .with_min_inner_size([650.0, 480.0])
         .with_max_inner_size([650.0, 480.0])
         .with_resizable(false)
-        .with_title("Remove Ban Api Async v1.2");
+        .with_title("Remove Ban Api Async");
 
     let mut options = eframe::NativeOptions { viewport, ..Default::default() };
 
